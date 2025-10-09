@@ -1,5 +1,6 @@
 # Зависимости
 node_modules/
+test/AGI-Tasks/
 package-lock.json
 config.yaml
 config.yaml.bak

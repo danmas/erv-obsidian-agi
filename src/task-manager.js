@@ -1,4 +1,4 @@
-const { fixRussianEncoding } = require('./fix-encoding');
+const { fixRussianEncoding, sanitizeFilename } = require('./fix-encoding');
 const { parseChecklist, parseFrontmatter, extractTaskTitle } = require('./note-parser');
 
 class TaskManager {
@@ -12,12 +12,13 @@ class TaskManager {
     return `task-${now.toISOString().split('T')[0]}-${Date.now().toString().slice(-6)}`;
   }
 
-  createTaskNote(taskTitle, steps) {
+  createTaskNote(taskTitle, steps, considerations = null) {
     const taskId = this.generateTaskId();
     const created = new Date().toISOString();
     
-    // Исправляем кодировку для названия файла
+    // Исправляем кодировку и санитизируем для названия файла
     const fixedTitle = fixRussianEncoding(taskTitle);
+    const safeFilename = sanitizeFilename(fixedTitle);
     
     const frontmatter = `---
 task_id: ${taskId}
@@ -26,12 +27,21 @@ created: ${created}
 parent: null
 ---`;
 
-    const stepsList = steps.map(step => `- [ ] [[${step}]]`).join('\n');
+    // Добавляем префиксы "Шаг N:" к каждому шагу и санитизируем для создания валидных ссылок
+    const stepsList = steps.map((step, idx) => {
+      const cleanStep = sanitizeFilename(fixRussianEncoding(step));
+      return `- [ ] [[Шаг ${idx + 1} ${cleanStep}]]`;
+    }).join('\n');
+    
+    // Добавляем секцию с соображениями ИИ если они есть
+    const considerationsSection = considerations 
+      ? `\n## 🧠 Соображения ИИ:\n\n${considerations}\n` 
+      : '';
 
     const content = `${frontmatter}
 
 # 🎯 Задача: ${fixedTitle}
-
+${considerationsSection}
 ## План выполнения:
 
 ${stepsList}
@@ -41,7 +51,7 @@ ${stepsList}
 **Статус:** В ожидании
 `;
 
-    return { taskId, content, path: `AGI-Tasks/${fixedTitle}.md` };
+    return { taskId, content, path: `AGI-Tasks/${safeFilename}.md`, steps, safeFilename };
   }
 
   async createTask(taskTitle, steps = null) {
@@ -52,8 +62,12 @@ ${stepsList}
     
     // Если шаги не переданы и есть LLM - генерируем план
     let taskSteps = steps;
+    let considerations = null;
+    
     if (!taskSteps && this.llm) {
-      taskSteps = await this.llm.generateTaskPlan(fixedTaskTitle);
+      const llmResult = await this.llm.generateTaskPlan(fixedTaskTitle);
+      taskSteps = llmResult.steps;
+      considerations = llmResult.considerations;
     }
     
     // Если всё ещё нет шагов - используем дефолтные
@@ -69,7 +83,10 @@ ${stepsList}
     // Исправляем кодировку в шагах
     const fixedTaskSteps = taskSteps.map(step => fixRussianEncoding(step));
     
-    const task = this.createTaskNote(fixedTaskTitle, fixedTaskSteps);
+    // Исправляем кодировку в соображениях если они есть
+    const fixedConsiderations = considerations ? fixRussianEncoding(considerations) : null;
+    
+    const task = this.createTaskNote(fixedTaskTitle, fixedTaskSteps, fixedConsiderations);
     await this.client.createNote(task.path, task.content);
     
     console.log(`\n📋 План:`);
@@ -78,7 +95,69 @@ ${stepsList}
     });
     
     console.log(`\n✨ Задача создана в Obsidian: ${task.path}\n`);
+    
+    // Создаем заметки для каждого шага
+    console.log(`\n📝 Создаю заметки для шагов...`);
+    await this.createStepNotes(fixedTaskTitle, fixedTaskSteps);
+    
     return task;
+  }
+
+  /**
+   * Создает заметки для всех шагов задачи
+   * @param {string} taskTitle - Название задачи
+   * @param {Array} steps - Массив шагов
+   */
+  async createStepNotes(taskTitle, steps) {
+    for (let i = 0; i < steps.length; i++) {
+      const stepNumber = i + 1;
+      const stepTitle = steps[i];
+      
+      // Очищаем название шага от команд и спецсимволов
+      const cleanStepTitle = sanitizeFilename(fixRussianEncoding(stepTitle));
+      const stepWithPrefix = `Шаг ${stepNumber} ${cleanStepTitle}`;
+      
+      try {
+        // Генерируем соображения для шага (используем оригинальный stepTitle для контекста)
+        let stepConsiderations = 'Выполнить данный шаг согласно требованиям задачи.';
+        if (this.llm) {
+          stepConsiderations = await this.llm.generateStepConsiderations(stepTitle, taskTitle);
+        }
+        
+        // Санитизируем имя файла (уже очищено, но на всякий случай)
+        const safeStepFilename = stepWithPrefix;
+        
+        // Создаем содержимое заметки для шага
+        const stepContent = `---
+step_number: ${stepNumber}
+parent_task: ${taskTitle}
+status: pending
+---
+
+# ${stepWithPrefix}
+
+## 🧠 Соображения ИИ:
+
+${stepConsiderations}
+
+## ✅ Критерии выполнения:
+
+- [ ] Шаг выполнен согласно плану
+- [ ] Результат проверен
+
+---
+**Родительская задача:** ${taskTitle}
+`;
+        
+        const stepPath = `AGI-Tasks/${safeStepFilename}.md`;
+        await this.client.createNote(stepPath, stepContent);
+        
+        console.log(`   ✓ Создана заметка для шага ${stepNumber}: ${safeStepFilename}.md`);
+      } catch (error) {
+        console.error(`   ✗ Ошибка при создании заметки для шага ${stepNumber}: ${error.message}`);
+      }
+    }
+    console.log(`\n✨ Все заметки для шагов созданы\n`);
   }
 
   /**
@@ -190,6 +269,127 @@ ${stepsList}
 `;
 
     return { taskId, content, path: `AGI-Tasks/${fixedTitle}.md` };
+  }
+
+  /**
+   * Создает задачу из черновика в Obsidian
+   * @param {string} draftPath - Путь к черновику
+   * @returns {Object} - Созданная задача
+   */
+  async createTaskFromDraft(draftPath) {
+    console.log(`\n📖 Читаю черновик: ${draftPath}\n`);
+    
+    // Читаем черновик
+    const draftContent = await this.client.readNote(draftPath);
+    
+    // Извлекаем заголовок (если есть)
+    const titleMatch = draftContent.match(/^#\s+(.+)/m);
+    const taskTitle = titleMatch ? titleMatch[1] : 'Задача из черновика';
+    
+    console.log(`\n🚀 Создаю задачу на основе черновика: "${taskTitle}"\n`);
+    
+    // Удаляем фронтматтер если есть (чтобы не было конфликта)
+    let userContext = draftContent.replace(/^---[\s\S]*?---\n/, '').trim();
+    
+    // Генерируем план через LLM с учетом контекста
+    let taskSteps = [];
+    let considerations = null;
+    
+    if (this.llm) {
+      const llmResult = await this.llm.generateTaskPlanWithContext(taskTitle, userContext);
+      taskSteps = llmResult.steps;
+      considerations = llmResult.considerations;
+    }
+    
+    // Если LLM не вернул план - используем дефолтные шаги
+    if (!taskSteps || taskSteps.length === 0) {
+      taskSteps = [
+        `Анализ задачи "${taskTitle}"`,
+        'Подготовка необходимых ресурсов',
+        'Выполнение основных действий',
+        'Проверка результатов'
+      ];
+    }
+    
+    const fixedTaskTitle = fixRussianEncoding(taskTitle);
+    const fixedTaskSteps = taskSteps.map(step => fixRussianEncoding(step));
+    
+    // Исправляем кодировку в соображениях если они есть
+    const fixedConsiderations = considerations ? fixRussianEncoding(considerations) : null;
+    
+    // Создаем новое содержимое задачи
+    const task = this.createTaskNoteWithContext(
+      fixedTaskTitle, 
+      fixedTaskSteps, 
+      userContext,
+      fixedConsiderations
+    );
+    
+    // ВАЖНО: обновляем существующую заметку, а не создаем новую
+    await this.client.updateNote(draftPath, task.content);
+    
+    console.log(`\n📋 План:`);
+    fixedTaskSteps.forEach((step, idx) => {
+      console.log(`   ${idx + 1}. ${step}`);
+    });
+    
+    console.log(`\n✨ Черновик преобразован в задачу: ${draftPath}\n`);
+    
+    // Создаем заметки для каждого шага
+    console.log(`\n📝 Создаю заметки для шагов...`);
+    await this.createStepNotes(fixedTaskTitle, fixedTaskSteps);
+    
+    return task;
+  }
+
+  /**
+   * Создает содержимое заметки с контекстом пользователя
+   * @param {string} taskTitle - Название задачи
+   * @param {Array} steps - Шаги выполнения
+   * @param {string} userContext - Исходные соображения пользователя
+   * @param {string} considerations - Соображения ИИ
+   * @returns {Object} - Объект с содержимым задачи
+   */
+  createTaskNoteWithContext(taskTitle, steps, userContext, considerations = null) {
+    const taskId = this.generateTaskId();
+    const created = new Date().toISOString();
+    
+    const frontmatter = `---
+task_id: ${taskId}
+status: pending
+created: ${created}
+parent: null
+---`;
+
+    // Добавляем префиксы "Шаг N:" к каждому шагу и санитизируем для создания валидных ссылок
+    const stepsList = steps.map((step, idx) => {
+      const cleanStep = sanitizeFilename(fixRussianEncoding(step));
+      return `- [ ] [[Шаг ${idx + 1} ${cleanStep}]]`;
+    }).join('\n');
+    
+    // Добавляем секцию с соображениями ИИ если они есть
+    const considerationsSection = considerations 
+      ? `\n## 🧠 Соображения ИИ:\n\n${considerations}\n` 
+      : '';
+
+    const content = `${frontmatter}
+
+# 🎯 Задача: ${taskTitle}
+
+## 📝 Исходные соображения пользователя:
+
+${userContext}
+${considerationsSection}
+## План выполнения:
+
+${stepsList}
+
+---
+**Создано:** ${new Date().toLocaleString('ru-RU')}
+**Статус:** В ожидании
+`;
+
+    return { taskId, content, steps };
   }
 }
 

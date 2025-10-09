@@ -41,4 +41,54 @@ function fixRussianEncoding(text) {
   return fixedText;
 }
 
-module.exports = { fixRussianEncoding };
+/**
+ * Санитизирует строку для использования в имени файла
+ * @param {string} filename - Исходное имя файла
+ * @returns {string} - Безопасное имя файла
+ */
+function sanitizeFilename(filename) {
+  if (!filename || typeof filename !== 'string') return 'Untitled';
+  
+  let sanitized = filename;
+  
+  // Если есть запятая, берем только текст до первой запятой (обычно после запятой идут команды/примеры)
+  const commaIndex = sanitized.indexOf(',');
+  if (commaIndex > 20) { // Если запятая не в самом начале
+    sanitized = sanitized.substring(0, commaIndex);
+  }
+  
+  // Удаляем обратные кавычки и их содержимое (команды в markdown)
+  sanitized = sanitized.replace(/`[^`]*`/g, '');
+  
+  // Удаляем запрещенные символы для Windows и Unix: < > : " / \ | ? * $ ` ~ # & ! @ % ^ ( ) [ ] { } ; =
+  sanitized = sanitized.replace(/[<>:"/\\|?*$`~#&!@%^()[\]{};=]/g, '');
+  
+  // Удаляем переносы строк и табуляцию
+  sanitized = sanitized.replace(/[\r\n\t]/g, ' ');
+  
+  // Заменяем множественные пробелы на один
+  sanitized = sanitized.replace(/\s+/g, ' ');
+  
+  // Убираем пробелы в начале и конце
+  sanitized = sanitized.trim();
+  
+  // Убираем точки в начале и конце (Windows не любит)
+  sanitized = sanitized.replace(/^\.+|\.+$/g, '');
+  
+  // Ограничиваем длину (для читаемости и совместимости)
+  const maxLength = 100;
+  if (sanitized.length > maxLength) {
+    // Обрезаем по словам, а не посередине слова
+    sanitized = sanitized.substring(0, maxLength);
+    const lastSpace = sanitized.lastIndexOf(' ');
+    if (lastSpace > 50) { // Если есть пробел не слишком близко к началу
+      sanitized = sanitized.substring(0, lastSpace);
+    }
+    sanitized = sanitized.trim();
+  }
+  
+  // Если после всех операций имя пустое, возвращаем дефолтное
+  return sanitized || 'Untitled';
+}
+
+module.exports = { fixRussianEncoding, sanitizeFilename };
