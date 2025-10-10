@@ -22,13 +22,21 @@ async function main() {
     const llm = new LLMClient();
     const taskManager = new TaskManager(obsidian, llm);
     
-    await taskManager.createTaskFromDraft(draftPath);
+    // Создаем задачу из черновика или генерируем уточняющие вопросы
+    const result = await taskManager.createTaskFromDraft(draftPath);
+    
+    // Проверяем результат
+    if (result && result.type === 'questions') {
+      console.log(`\n❓ Для задачи требуются уточнения. Заметка с вопросами создана: ${result.path}`);
+      console.log(`\n📝 Ответьте на вопросы в заметке и запустите скрипт снова с тем же путем.`);
+    }
   } else {
     // Обычный режим
     const taskTitle = args[0];
     
     if (!taskTitle) {
       console.log('❌ Укажите задачу: node index.js "Название задачи"');
+      console.log('Или создайте задачу из черновика: node index.js --from-obsidian "AGI-Tasks/Черновик.md"');
       process.exit(1);
     }
 
@@ -36,8 +44,27 @@ async function main() {
     const llm = new LLMClient();
     const taskManager = new TaskManager(obsidian, llm);
 
-    // Теперь план генерируется автоматически через LLM
-    await taskManager.createTask(taskTitle);
+    // Генерируем план через LLM
+    const llmResult = await llm.generateTaskPlanWithContext(taskTitle, '');
+    
+    if (llmResult.type === 'questions') {
+      // Если LLM вернул вопросы, создаем черновик с вопросами
+      console.log(`\n❓ Задача требует уточнений. Создаю черновик с вопросами...`);
+      
+      // Создаем имя файла для черновика
+      const safeFilename = taskTitle.replace(/[^\wа-яА-ЯёЁ\s-]/g, '').replace(/\s+/g, ' ').trim().replace(/\s/g, '_');
+      const draftPath = `AGI-Tasks/Черновик - ${safeFilename}.md`;
+      
+      // Создаем заметку с вопросами
+      const questionsNote = taskManager.createQuestionsNote(taskTitle, llmResult.questions, '');
+      await obsidian.createNote(draftPath, questionsNote.content);
+      
+      console.log(`\n✨ Черновик с вопросами создан: ${draftPath}`);
+      console.log(`\n📝 Ответьте на вопросы в заметке и запустите скрипт с флагом --from-obsidian "${draftPath}"`);
+    } else {
+      // Если LLM вернул план, создаем задачу
+      await taskManager.createTask(taskTitle);
+    }
   }
 }
 

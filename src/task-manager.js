@@ -274,7 +274,7 @@ ${stepsList}
   /**
    * Создает задачу из черновика в Obsidian
    * @param {string} draftPath - Путь к черновику
-   * @returns {Object} - Созданная задача
+   * @returns {Object} - Созданная задача или объект с вопросами
    */
   async createTaskFromDraft(draftPath) {
     console.log(`\n📖 Читаю черновик: ${draftPath}\n`);
@@ -286,49 +286,134 @@ ${stepsList}
     const titleMatch = draftContent.match(/^#\s+(.+)/m);
     const taskTitle = titleMatch ? titleMatch[1] : 'Задача из черновика';
     
-    console.log(`\n🚀 Создаю задачу на основе черновика: "${taskTitle}"\n`);
+    console.log(`\n🚀 Анализирую задачу из черновика: "${taskTitle}"\n`);
     
     // Удаляем фронтматтер если есть (чтобы не было конфликта)
     let userContext = draftContent.replace(/^---[\s\S]*?---\n/, '').trim();
     
-    // Генерируем план через LLM с учетом контекста
-    let taskSteps = [];
-    let considerations = null;
+    // Проверяем, есть ли в черновике уже ответы на вопросы
+    const answersSection = this.extractAnswersFromDraft(draftContent);
     
-    if (this.llm) {
-      const llmResult = await this.llm.generateTaskPlanWithContext(taskTitle, userContext);
-      taskSteps = llmResult.steps;
-      considerations = llmResult.considerations;
+    if (answersSection && answersSection.questions && answersSection.answers) {
+      // Если есть ответы на вопросы, генерируем план на их основе
+      console.log(`\n✅ Найдены ответы на уточняющие вопросы. Генерирую план...`);
+      
+      const llmResult = await this.llm.generatePlanFromAnswers(
+        taskTitle, 
+        answersSection.questions, 
+        answersSection.answers
+      );
+      
+      if (llmResult.type === 'plan') {
+        // Создаем задачу на основе плана
+        const fixedTaskTitle = fixRussianEncoding(taskTitle);
+        const fixedTaskSteps = llmResult.steps.map(step => fixRussianEncoding(step));
+        const fixedConsiderations = llmResult.considerations ? fixRussianEncoding(llmResult.considerations) : null;
+        
+        // Создаем новое содержимое задачи, сохраняя историю вопросов и ответов
+        const task = this.createTaskNoteWithQA(
+          fixedTaskTitle, 
+          fixedTaskSteps, 
+          userContext,
+          fixedConsiderations,
+          answersSection.questions,
+          answersSection.answers
+        );
+        
+        // Обновляем существующую заметку
+        await this.client.updateNote(draftPath, task.content);
+        
+        console.log(`\n📋 План:`);
+        fixedTaskSteps.forEach((step, idx) => {
+          console.log(`   ${idx + 1}. ${step}`);
+        });
+        
+        console.log(`\n✨ Черновик преобразован в задачу: ${draftPath}\n`);
+        
+        // Создаем заметки для каждого шага
+        console.log(`\n📝 Создаю заметки для шагов...`);
+        await this.createStepNotes(fixedTaskTitle, fixedTaskSteps);
+        
+        return task;
+      }
+    } else {
+      // Если нет ответов, генерируем план или вопросы
+      if (this.llm) {
+        const llmResult = await this.llm.generateTaskPlanWithContext(taskTitle, userContext);
+        
+        if (llmResult.type === 'questions') {
+          // Если LLM вернул вопросы, создаем заметку с вопросами
+          console.log(`\n❓ Задача требует уточнений. Создаю заметку с вопросами...`);
+          
+          const questionsNote = this.createQuestionsNote(
+            taskTitle,
+            llmResult.questions,
+            userContext
+          );
+          
+          // Обновляем существующую заметку
+          await this.client.updateNote(draftPath, questionsNote.content);
+          
+          console.log(`\n✨ Черновик преобразован в заметку с вопросами: ${draftPath}`);
+          console.log(`\n📝 Ответьте на вопросы в заметке и запустите скрипт снова с тем же путем.`);
+          
+          return { type: 'questions', path: draftPath, questions: llmResult.questions };
+        } else if (llmResult.type === 'plan') {
+          // Если LLM вернул план, создаем задачу
+          const fixedTaskTitle = fixRussianEncoding(taskTitle);
+          const fixedTaskSteps = llmResult.steps.map(step => fixRussianEncoding(step));
+          const fixedConsiderations = llmResult.considerations ? fixRussianEncoding(llmResult.considerations) : null;
+          
+          // Создаем новое содержимое задачи
+          const task = this.createTaskNoteWithContext(
+            fixedTaskTitle, 
+            fixedTaskSteps, 
+            userContext,
+            fixedConsiderations
+          );
+          
+          // Обновляем существующую заметку
+          await this.client.updateNote(draftPath, task.content);
+          
+          console.log(`\n📋 План:`);
+          fixedTaskSteps.forEach((step, idx) => {
+            console.log(`   ${idx + 1}. ${step}`);
+          });
+          
+          console.log(`\n✨ Черновик преобразован в задачу: ${draftPath}\n`);
+          
+          // Создаем заметки для каждого шага
+          console.log(`\n📝 Создаю заметки для шагов...`);
+          await this.createStepNotes(fixedTaskTitle, fixedTaskSteps);
+          
+          return task;
+        }
+      }
     }
     
-    // Если LLM не вернул план - используем дефолтные шаги
-    if (!taskSteps || taskSteps.length === 0) {
-      taskSteps = [
-        `Анализ задачи "${taskTitle}"`,
-        'Подготовка необходимых ресурсов',
-        'Выполнение основных действий',
-        'Проверка результатов'
-      ];
-    }
+    // Если LLM не доступен или не вернул ни плана, ни вопросов - используем дефолтные шаги
+    const taskSteps = [
+      `Анализ задачи "${taskTitle}"`,
+      'Подготовка необходимых ресурсов',
+      'Выполнение основных действий',
+      'Проверка результатов'
+    ];
     
     const fixedTaskTitle = fixRussianEncoding(taskTitle);
     const fixedTaskSteps = taskSteps.map(step => fixRussianEncoding(step));
-    
-    // Исправляем кодировку в соображениях если они есть
-    const fixedConsiderations = considerations ? fixRussianEncoding(considerations) : null;
     
     // Создаем новое содержимое задачи
     const task = this.createTaskNoteWithContext(
       fixedTaskTitle, 
       fixedTaskSteps, 
       userContext,
-      fixedConsiderations
+      null
     );
     
-    // ВАЖНО: обновляем существующую заметку, а не создаем новую
+    // Обновляем существующую заметку
     await this.client.updateNote(draftPath, task.content);
     
-    console.log(`\n📋 План:`);
+    console.log(`\n📋 План (базовый):`);
     fixedTaskSteps.forEach((step, idx) => {
       console.log(`   ${idx + 1}. ${step}`);
     });
@@ -340,6 +425,163 @@ ${stepsList}
     await this.createStepNotes(fixedTaskTitle, fixedTaskSteps);
     
     return task;
+  }
+  
+  /**
+   * Извлекает вопросы и ответы из черновика
+   * @param {string} content - Содержимое черновика
+   * @returns {Object|null} - Объект с вопросами и ответами или null
+   */
+  extractAnswersFromDraft(content) {
+    // Ищем секцию с вопросами и ответами
+    const qaMatch = content.match(/## Уточняющие вопросы:\s*([\s\S]*?)(?=##|$)/i);
+    
+    if (!qaMatch) return null;
+    
+    const qaSection = qaMatch[1].trim();
+    const qaLines = qaSection.split('\n').map(line => line.trim()).filter(line => line.length > 0);
+    
+    const questions = [];
+    const answers = [];
+    
+    // Парсим вопросы и ответы
+    let currentQuestion = null;
+    
+    for (const line of qaLines) {
+      // Если строка начинается с "Вопрос:" или "1.", "2." и т.д. - это вопрос
+      if (line.startsWith('Вопрос:') || /^\d+\.\s+/.test(line)) {
+        // Если был предыдущий вопрос без ответа, добавляем пустой ответ
+        if (currentQuestion !== null) {
+          answers.push('');
+        }
+        
+        // Извлекаем текст вопроса
+        const questionText = line.replace(/^Вопрос:\s*/, '').replace(/^\d+\.\s+/, '').trim();
+        questions.push(questionText);
+        currentQuestion = questionText;
+      }
+      // Если строка начинается с "Ответ:" - это ответ
+      else if (line.startsWith('Ответ:')) {
+        const answerText = line.replace(/^Ответ:\s*/, '').trim();
+        
+        if (currentQuestion !== null) {
+          answers.push(answerText);
+          currentQuestion = null;
+        }
+      }
+      // Если есть текущий вопрос и строка не пустая - считаем это ответом
+      else if (currentQuestion !== null && !line.startsWith('-') && !line.startsWith('*')) {
+        answers.push(line);
+        currentQuestion = null;
+      }
+    }
+    
+    // Если остался вопрос без ответа, добавляем пустой ответ
+    if (currentQuestion !== null) {
+      answers.push('');
+    }
+    
+    // Если нашли хотя бы один вопрос с ответом
+    if (questions.length > 0 && answers.length > 0 && questions.length === answers.length) {
+      return { questions, answers };
+    }
+    
+    return null;
+  }
+  
+  /**
+   * Создает заметку с уточняющими вопросами
+   * @param {string} taskTitle - Название задачи
+   * @param {Array} questions - Массив вопросов
+   * @param {string} userContext - Исходные соображения пользователя
+   * @returns {Object} - Объект с содержимым заметки
+   */
+  createQuestionsNote(taskTitle, questions, userContext) {
+    const created = new Date().toISOString();
+    
+    const frontmatter = `---
+status: questions
+created: ${created}
+---`;
+
+    // Форматируем вопросы в виде списка
+    const questionsList = questions.map((q, idx) => `${idx + 1}. ${q}\nОтвет: `).join('\n\n');
+
+    const content = `${frontmatter}
+
+# ❓ Уточняющие вопросы: ${taskTitle}
+
+## Исходные соображения пользователя:
+
+${userContext}
+
+## Уточняющие вопросы:
+
+${questionsList}
+
+---
+**Создано:** ${new Date().toLocaleString('ru-RU')}
+**Инструкция:** Ответьте на вопросы выше и запустите скрипт снова с тем же путем к заметке.
+`;
+
+    return { content };
+  }
+  
+  /**
+   * Создает содержимое заметки с вопросами и ответами
+   * @param {string} taskTitle - Название задачи
+   * @param {Array} steps - Шаги выполнения
+   * @param {string} userContext - Исходные соображения пользователя
+   * @param {string} considerations - Соображения ИИ
+   * @param {Array} questions - Массив вопросов
+   * @param {Array} answers - Массив ответов
+   * @returns {Object} - Объект с содержимым задачи
+   */
+  createTaskNoteWithQA(taskTitle, steps, userContext, considerations = null, questions = [], answers = []) {
+    const taskId = this.generateTaskId();
+    const created = new Date().toISOString();
+    
+    const frontmatter = `---
+task_id: ${taskId}
+status: pending
+created: ${created}
+parent: null
+---`;
+
+    // Добавляем префиксы "Шаг N:" к каждому шагу и санитизируем для создания валидных ссылок
+    const stepsList = steps.map((step, idx) => {
+      const cleanStep = sanitizeFilename(fixRussianEncoding(step));
+      return `- [ ] [[Шаг ${idx + 1} ${cleanStep}]]`;
+    }).join('\n');
+    
+    // Добавляем секцию с соображениями ИИ если они есть
+    const considerationsSection = considerations 
+      ? `\n## 🧠 Соображения ИИ:\n\n${considerations}\n` 
+      : '';
+    
+    // Форматируем вопросы и ответы
+    const qaSection = questions.length > 0 
+      ? `\n## 🔍 Уточняющие вопросы и ответы:\n\n${questions.map((q, idx) => `**Вопрос ${idx + 1}:** ${q}\n**Ответ:** ${answers[idx] || 'Нет ответа'}`).join('\n\n')}\n` 
+      : '';
+
+    const content = `${frontmatter}
+
+# 🎯 Задача: ${taskTitle}
+
+## 📝 Исходные соображения пользователя:
+
+${userContext}
+${qaSection}${considerationsSection}
+## План выполнения:
+
+${stepsList}
+
+---
+**Создано:** ${new Date().toLocaleString('ru-RU')}
+**Статус:** В ожидании
+`;
+
+    return { taskId, content, steps };
   }
 
   /**

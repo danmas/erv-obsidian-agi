@@ -5,6 +5,7 @@ class LLMClient {
   constructor() {
     this.baseUrl = process.env.LLM_SERVER_URL || 'http://usa:3002';
     this.defaultModel = process.env.LLM_MODEL || 'FAST';
+    this.requestTimeout = parseInt(process.env.LLM_REQUEST_TIMEOUT) || 30000;
   }
 
   async generateTaskPlan(taskTitle) {
@@ -64,7 +65,7 @@ class LLMClient {
       // Проверяем доступность сервера перед отправкой запроса
       try {
         console.log(`🔍 Проверяю доступность сервера...`);
-        await axios.get(`${this.baseUrl}`, { timeout: 2000 });
+        await axios.get(`${this.baseUrl}`, { timeout: parseInt(process.env.LLM_HEALTH_TIMEOUT) || 2000 });
         console.log(`✅ Сервер доступен`);
       } catch (healthError) {
         console.error(`❌ Сервер недоступен: ${healthError.message}`);
@@ -72,7 +73,7 @@ class LLMClient {
       }
       
       const response = await axios.post(`${this.baseUrl}/api/send-request`, requestData, {
-        timeout: 30000 // 30 секунд таймаут
+        timeout: this.requestTimeout
       });
 
       console.log(`📥 Получен ответ от LLM:`, JSON.stringify(response.data, null, 2));
@@ -113,23 +114,41 @@ class LLMClient {
   }
 
   /**
-   * Парсит ответ LLM, извлекая план и соображения
+   * Парсит ответ LLM, извлекая план, соображения или вопросы
    * @param {string} text - Текст ответа от LLM
-   * @returns {Object} - Объект с массивом steps и строкой considerations
+   * @returns {Object} - Объект с результатом парсинга
    */
   parsePlanAndConsiderations(text) {
+    // 1. Проверяем наличие секции ВОПРОСЫ:
+    const questionsMatch = text.match(/ВОПРОСЫ:\s*([\s\S]*?)$/i);
+    if (questionsMatch) {
+      const questionsSection = questionsMatch[1].trim();
+      const questions = questionsSection
+        .split('\n')
+        .map(line => line.replace(/^[\-\*\d\.\)]\s*/, '').trim())
+        .filter(line => line.length > 5);
+      
+      if (questions.length > 0) {
+        return {
+          type: 'questions',
+          questions: questions
+        };
+      }
+    }
+
+    // 2. Если вопросов нет, ищем план и соображения
     let planSection = '';
     let considerationsSection = '';
     
     // Ищем секции ПЛАН: и СООБРАЖЕНИЯ:
-    const planMatch = text.match(/ПЛАН:\s*([\s\S]*?)(?=СООБРАЖЕНИЯ:|$)/i);
-    const considerationsMatch = text.match(/СООБРАЖЕНИЯ:\s*([\s\S]*?)$/i);
+    const planMatch = text.match(/ПЛАН:\s*([\s\S]*?)(?=СООБРАЖЕНИЯ:|ВОПРОСЫ:|$)/i);
+    const considerationsMatch = text.match(/СООБРАЖЕНИЯ:\s*([\s\S]*?)(?=ВОПРОСЫ:|$)/i);
     
     if (planMatch) {
       planSection = planMatch[1].trim();
     } else {
       // Если маркер ПЛАН: не найден, используем весь текст до СООБРАЖЕНИЯ:
-      const beforeConsiderations = text.split(/СООБРАЖЕНИЯ:/i)[0];
+      const beforeConsiderations = text.split(/СООБРАЖЕНИЯ:|ВОПРОСЫ:/i)[0];
       planSection = beforeConsiderations.trim();
     }
     
@@ -153,6 +172,7 @@ class LLMClient {
       .filter(line => !/^Project setup|^Layer \d|^These steps|^The framework|^But |^In conclusion,/i.test(line)); // Фильтруем строки с метаданными
     
     return {
+      type: 'plan',
       steps: steps.length > 0 ? steps : ['Выполнить основные действия'],
       considerations: considerationsSection || null
     };
@@ -201,7 +221,7 @@ class LLMClient {
       };
       
       const response = await axios.post(`${this.baseUrl}/api/send-request`, requestData, {
-        timeout: 30000
+        timeout: this.requestTimeout
       });
 
       const planText = response.data.content || response.data.response || response.data.result || '';
@@ -253,18 +273,23 @@ class LLMClient {
   }
 
   /**
-   * Генерирует план задачи с учетом контекста пользователя
+   * Генерирует план задачи с учетом контекста пользователя или задает уточняющие вопросы
    * @param {string} taskTitle - Название задачи
    * @param {string} userContext - Соображения и контекст от пользователя
-   * @returns {Array} - Массив шагов
+   * @returns {Object} - Объект с планом или вопросами
    */
   async generateTaskPlanWithContext(taskTitle, userContext) {
-    const systemPrompt = `Ты — AI-планировщик задач. Твоя задача: разбить пользовательскую задачу на конкретные, выполнимые шаги И дать свои соображения по выполнению.
+    const systemPrompt = `Ты — AI-планировщик задач. Твоя задача — проанализировать задачу пользователя и либо составить план, либо задать уточняющие вопросы.
 
-ВАЖНО ПРО ФОРМАТ ОТВЕТА:
-- Ответ ОБЯЗАТЕЛЬНО должен содержать ДВА раздела: ПЛАН и СООБРАЖЕНИЯ
-- Раздел ПЛАН должен начинаться с маркера "ПЛАН:"
-- Раздел СООБРАЖЕНИЯ должен начинаться с маркера "СООБРАЖЕНИЯ:"
+АНАЛИЗ ЗАДАЧИ:
+1. Оцени ясность и полноту задачи. Достаточно ли информации для составления конкретного плана?
+2. Если задача ясна, переходи к созданию плана.
+3. Если задача слишком общая, неоднозначная или сложная, твоя ОБЯЗАННОСТЬ — задать уточняющие вопросы.
+
+ВАРИАНТ 1: ЗАДАЧА ЯСНА (ПЛАН + СООБРАЖЕНИЯ)
+- Ответ ОБЯЗАТЕЛЬНО должен содержать ДВА раздела: ПЛАН и СООБРАЖЕНИЯ.
+- Раздел ПЛАН начинается с "ПЛАН:".
+- Раздел СООБРАЖЕНИЯ начинается с "СООБРАЖЕНИЯ:".
 
 ТРЕБОВАНИЯ К ПЛАНУ:
 - Каждый шаг должен быть чётким и конкретным
@@ -281,8 +306,16 @@ class LLMClient {
 - Учитывай соображения пользователя и дополняй их своими
 - 2-4 предложения
 
-Пример для задачи "Настроить Docker для проекта":
+ВАРИАНТ 2: ЗАДАЧА НЕЯСНА (ВОПРОСЫ)
+- Если информация недостаточна, ответ должен содержать ТОЛЬКО ОДИН раздел: ВОПРОСЫ.
+- Раздел ВОПРОСЫ начинается с "ВОПРОСЫ:".
 
+ТРЕБОВАНИЯ К ВОПРОСАМ:
+- Задай от 2 до 5 ключевых вопросов, которые помогут прояснить задачу.
+- Вопросы должны быть четкими и по существу.
+- Формат: одна строка = один вопрос. БЕЗ нумерации.
+
+Пример ответа с планом:
 ПЛАН:
 Установить Docker Desktop на Windows
 Создать Dockerfile для приложения
@@ -291,7 +324,14 @@ class LLMClient {
 Проверить работоспособность приложения в контейнере
 
 СООБРАЖЕНИЯ:
-При работе с Docker на Windows важно убедиться, что включен WSL2 для лучшей производительности. Обратите внимание на размер финального образа - используйте multi-stage builds для оптимизации. Не забудьте добавить .dockerignore для исключения ненужных файлов. Рекомендую начать с простого Dockerfile и постепенно добавлять оптимизации.`;
+При работе с Docker на Windows важно убедиться, что включен WSL2 для лучшей производительности. Обратите внимание на размер финального образа - используйте multi-stage builds для оптимизации. Не забудьте добавить .dockerignore для исключения ненужных файлов.
+
+Пример ответа с вопросами (для задачи "Оптимизировать сайт"):
+ВОПРОСЫ:
+Какой аспект сайта требует оптимизации (скорость загрузки, SEO, мобильная версия)?
+Есть ли доступ к серверным логам и аналитике (Google Analytics, etc.)?
+Какие технологии используются на фронтенде и бэкенде?
+Существуют ли конкретные метрики производительности (LCP, FID), которые нужно улучшить?`;
 
     const fixedTaskTitle = fixRussianEncoding(taskTitle);
     const fixedUserContext = fixRussianEncoding(userContext);
@@ -301,10 +341,10 @@ class LLMClient {
 Контекст и соображения пользователя:
 ${fixedUserContext}
 
-Распиши план выполнения этой задачи с учетом контекста:`;
+Проанализируй задачу и либо распиши план, либо задай уточняющие вопросы:`;
 
     try {
-      console.log(`\n🧠 Генерирую план для задачи с учетом контекста пользователя...`);
+      console.log(`\n🧠 Анализирую задачу и генерирую ответ...`);
       console.log(`📡 Подключаюсь к: ${this.baseUrl}/api/send-request`);
       console.log(`📝 Модель: ${this.defaultModel}`);
       
@@ -318,7 +358,7 @@ ${fixedUserContext}
       // Проверяем доступность сервера перед отправкой запроса
       try {
         console.log(`🔍 Проверяю доступность сервера...`);
-        await axios.get(`${this.baseUrl}`, { timeout: 2000 });
+        await axios.get(`${this.baseUrl}`, { timeout: parseInt(process.env.LLM_HEALTH_TIMEOUT) || 2000 });
         console.log(`✅ Сервер доступен`);
       } catch (healthError) {
         console.error(`❌ Сервер недоступен: ${healthError.message}`);
@@ -326,23 +366,31 @@ ${fixedUserContext}
       }
       
       const response = await axios.post(`${this.baseUrl}/api/send-request`, requestData, {
-        timeout: 30000 // 30 секунд таймаут
+        timeout: this.requestTimeout
       });
 
-      const planText = response.data.content || response.data.response || response.data.result || '';
-      console.log(`📄 Текст ответа:\n${planText}\n`);
+      const llmResponseText = response.data.content || response.data.response || response.data.result || '';
+      console.log(`📄 Текст ответа:\n${llmResponseText}\n`);
       
-      // Парсим ответ: извлекаем план и соображения
-      const parsed = this.parsePlanAndConsiderations(planText);
+      // Парсим ответ: извлекаем план, соображения или вопросы
+      const parsed = this.parsePlanAndConsiderations(llmResponseText);
       
-      console.log(`✅ План создан: ${parsed.steps.length} шагов\n`);
-      console.log(`📋 Шаги плана:`);
-      parsed.steps.forEach((step, idx) => {
-        console.log(`   ${idx + 1}. ${step}`);
-      });
-      
-      if (parsed.considerations) {
-        console.log(`\n💡 Соображения ИИ:\n${parsed.considerations}\n`);
+      if (parsed.type === 'plan') {
+        console.log(`✅ План создан: ${parsed.steps.length} шагов\n`);
+        console.log(`📋 Шаги плана:`);
+        parsed.steps.forEach((step, idx) => {
+          console.log(`   ${idx + 1}. ${step}`);
+        });
+        
+        if (parsed.considerations) {
+          console.log(`\n💡 Соображения ИИ:\n${parsed.considerations}\n`);
+        }
+      } else if (parsed.type === 'questions') {
+        console.log(`❓ Требуются уточнения: ${parsed.questions.length} вопросов\n`);
+        console.log(`📋 Вопросы:`);
+        parsed.questions.forEach((q, idx) => {
+          console.log(`   ${idx + 1}. ${q}`);
+        });
       }
       
       return parsed;
@@ -352,13 +400,122 @@ ${fixedUserContext}
       
       // Возвращаем базовый план в случае ошибки
       return {
+        type: 'plan',
         steps: [
           `Анализ задачи "${taskTitle}"`,
           'Подготовка необходимых ресурсов',
           'Выполнение основных действий',
           'Проверка результатов'
         ],
-        considerations: null
+        considerations: 'Не удалось подключиться к LLM для генерации детального плана.'
+      };
+    }
+  }
+  
+  /**
+   * Генерирует ответы на уточняющие вопросы
+   * @param {string} taskTitle - Название задачи
+   * @param {Array} questions - Массив вопросов
+   * @param {Array} answers - Массив ответов пользователя
+   * @returns {Object} - Объект с планом
+   */
+  async generatePlanFromAnswers(taskTitle, questions, answers) {
+    const systemPrompt = `Ты — AI-планировщик задач. Твоя задача: разбить пользовательскую задачу на конкретные, выполнимые шаги И дать свои соображения по выполнению.
+
+ВАЖНО ПРО ФОРМАТ ОТВЕТА:
+- Ответ ОБЯЗАТЕЛЬНО должен содержать ДВА раздела: ПЛАН и СООБРАЖЕНИЯ
+- Раздел ПЛАН должен начинаться с маркера "ПЛАН:"
+- Раздел СООБРАЖЕНИЯ должен начинаться с маркера "СООБРАЖЕНИЯ:"
+
+ТРЕБОВАНИЯ К ПЛАНУ:
+- Каждый шаг должен быть чётким и конкретным
+- Шагов должно быть от 1 до 10
+- Формат СТРОГО: одна строка = один шаг
+- НЕ используй нумерацию в шагах, только текст
+- Пиши на русском языке
+- ВНИМАТЕЛЬНО учитывай ответы пользователя на вопросы
+
+ТРЕБОВАНИЯ К СООБРАЖЕНИЯМ:
+- Опиши важные моменты, которые стоит учесть
+- Предупреди о потенциальных сложностях
+- Дай рекомендации по выполнению
+- Учитывай ответы пользователя
+- 2-4 предложения`;
+
+    const fixedTaskTitle = fixRussianEncoding(taskTitle);
+    
+    // Формируем контекст из вопросов и ответов
+    const questionsAndAnswers = questions.map((q, idx) => {
+      const answer = answers[idx] || 'Нет ответа';
+      return `Вопрос: ${q}\nОтвет: ${answer}`;
+    }).join('\n\n');
+    
+    const userPrompt = `Задача: "${fixedTaskTitle}"
+
+Уточняющие вопросы и ответы пользователя:
+${questionsAndAnswers}
+
+Теперь, когда есть ответы на вопросы, распиши детальный план выполнения задачи:`;
+
+    try {
+      console.log(`\n🧠 Генерирую план на основе ответов пользователя...`);
+      console.log(`📡 Подключаюсь к: ${this.baseUrl}/api/send-request`);
+      console.log(`📝 Модель: ${this.defaultModel}`);
+      
+      const requestData = {
+        model: this.defaultModel,
+        prompt: systemPrompt,
+        inputText: userPrompt,
+        saveResponse: false
+      };
+      
+      // Проверяем доступность сервера перед отправкой запроса
+      try {
+        console.log(`🔍 Проверяю доступность сервера...`);
+        await axios.get(`${this.baseUrl}`, { timeout: parseInt(process.env.LLM_HEALTH_TIMEOUT) || 2000 });
+        console.log(`✅ Сервер доступен`);
+      } catch (healthError) {
+        console.error(`❌ Сервер недоступен: ${healthError.message}`);
+        throw new Error(`LLM сервер недоступен: ${healthError.message}`);
+      }
+      
+      const response = await axios.post(`${this.baseUrl}/api/send-request`, requestData, {
+        timeout: this.requestTimeout
+      });
+
+      const planText = response.data.content || response.data.response || response.data.result || '';
+      console.log(`📄 Текст ответа:\n${planText}\n`);
+      
+      // Парсим ответ: извлекаем план и соображения
+      const parsed = this.parsePlanAndConsiderations(planText);
+      
+      if (parsed.type === 'plan') {
+        console.log(`✅ План создан: ${parsed.steps.length} шагов\n`);
+        console.log(`📋 Шаги плана:`);
+        parsed.steps.forEach((step, idx) => {
+          console.log(`   ${idx + 1}. ${step}`);
+        });
+        
+        if (parsed.considerations) {
+          console.log(`\n💡 Соображения ИИ:\n${parsed.considerations}\n`);
+        }
+      }
+      
+      return parsed;
+    } catch (error) {
+      console.error(`\n❌ Ошибка при обращении к LLM: ${error.message}`);
+      console.log(`\n⚠️ Использую базовый план вместо LLM\n`);
+      
+      // Возвращаем базовый план в случае ошибки
+      return {
+        type: 'plan',
+        steps: [
+          `Анализ задачи "${taskTitle}"`,
+          'Подготовка необходимых ресурсов',
+          'Выполнение основных действий',
+          'Проверка результатов'
+        ],
+        considerations: 'Не удалось подключиться к LLM для генерации детального плана.'
       };
     }
   }
@@ -399,7 +556,7 @@ ${fixedUserContext}
       };
       
       const response = await axios.post(`${this.baseUrl}/api/send-request`, requestData, {
-        timeout: 20000 // 20 секунд таймаут
+        timeout: this.requestTimeout
       });
 
       const considerationsText = response.data.content || response.data.response || response.data.result || '';
