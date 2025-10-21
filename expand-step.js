@@ -4,15 +4,18 @@ const TaskManager = require('./src/task-manager');
 const LLMClient = require('./src/llm-client');
 
 async function main() {
-  // Получаем путь к задаче и индекс шага из аргументов командной строки
+  // Получаем путь к задаче и номер шага из аргументов командной строки
   const taskPath = process.argv[2];
-  const stepIndex = parseInt(process.argv[3]);
+  const stepNumber = parseInt(process.argv[3]);
   
-  if (!taskPath || isNaN(stepIndex)) {
-    console.log('❌ Использование: node expand-step.js "AGI-Tasks/Задача.md" 0');
-    console.log('   где 0 - индекс шага (начиная с 0)');
+  if (!taskPath || isNaN(stepNumber)) {
+    console.log('❌ Использование: node expand-step.js "AGI-Tasks/Задача.md" 1');
+    console.log('   где 1 - номер шага (начиная с 1)');
     process.exit(1);
   }
+  
+  // Преобразуем номер шага в индекс (индексация в массиве начинается с 0)
+  const stepIndex = stepNumber - 1;
 
   const obsidian = new ObsidianClient();
   const llm = new LLMClient();

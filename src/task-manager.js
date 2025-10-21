@@ -163,7 +163,7 @@ ${stepConsiderations}
   /**
    * Создает подзадачу на основе шага из родительской задачи
    * @param {string} parentTaskPath - Путь к родительской задаче
-   * @param {number} stepIndex - Индекс шага (начиная с 0)
+   * @param {number} stepIndex - Индекс шага (внутренний, начиная с 0)
    * @returns {Object} - Созданная подзадача
    */
   async createSubtask(parentTaskPath, stepIndex) {
@@ -176,7 +176,7 @@ ${stepConsiderations}
     const checklistItems = parseChecklist(parentContent);
     
     if (stepIndex >= checklistItems.length) {
-      throw new Error(`Шаг с индексом ${stepIndex} не найден. Всего шагов: ${checklistItems.length}`);
+      throw new Error(`Шаг с номером ${stepIndex + 1} не найден. Всего шагов: ${checklistItems.length}`);
     }
     
     const step = checklistItems[stepIndex];

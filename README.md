@@ -143,17 +143,17 @@ node index.js --from-obsidian "AGI-Tasks/Черновик - Настроить C
 ### Создание подзадачи
 
 ```bash
-node expand-step.js "AGI-Tasks/Задача.md" <индекс_шага>
+node expand-step.js "AGI-Tasks/Задача.md" <номер_шага>
 ```
 
 **Пример:**
 ```bash
-node expand-step.js "AGI-Tasks/Настроить CI_CD pipeline.md" 0
+node expand-step.js "AGI-Tasks/Настроить CI_CD pipeline.md" 1
 ```
 
 Агент:
 1. Прочитает родительскую задачу
-2. Получит шаг по индексу (нумерация с 0)
+2. Получит шаг по указанному номеру
 3. Сгенерирует детальный план для этого шага через LLM
 4. Создаст подзадачу со ссылкой на родительскую задачу
 

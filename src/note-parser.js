@@ -69,7 +69,7 @@ function extractTaskTitle(content) {
 /**
  * Обновляет статус пункта чек-листа в заметке
  * @param {string} content - Содержимое заметки
- * @param {number} stepIndex - Индекс шага (начиная с 0)
+ * @param {number} stepIndex - Индекс шага (внутренний, начиная с 0)
  * @param {boolean} completed - Новый статус
  * @returns {string} - Обновленное содержимое заметки
  */
@@ -78,7 +78,7 @@ function updateChecklistItem(content, stepIndex, completed) {
   const checklistItems = parseChecklist(content);
   
   if (stepIndex >= checklistItems.length) {
-    throw new Error(`Шаг с индексом ${stepIndex} не найден`);
+    throw new Error(`Шаг с номером ${stepIndex + 1} не найден`);
   }
   
   const item = checklistItems[stepIndex];
