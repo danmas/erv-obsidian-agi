@@ -1,0 +1,12 @@
+{
+  "name": "erv-obsidian-agi-web",
+  "version": "0.1.0",
+  "description": "Веб-интерфейс для управления задачами в Obsidian",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "dependencies": {
+    "express": "^4.18.2"
+  }
+}

@@ -1,0 +1,50 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Управление задачами</title>
+    <link rel="stylesheet" href="css/styles.css">
+    <!-- Добавляем библиотеку marked для рендеринга Markdown -->
+    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+</head>
+<body>
+    <div class="app-container">
+        <!-- Левая панель - дерево задач -->
+        <div class="left-panel">
+            <div class="panel-header">
+                <h2>Задачи</h2>
+                <button id="refreshTree" class="btn btn-small">Обновить</button>
+            </div>
+            <div id="taskTree" class="task-tree">
+                <!-- Дерево задач будет загружено сюда -->
+                <div class="loading">Загрузка задач...</div>
+            </div>
+        </div>
+
+        <!-- Правая панель - редактор -->
+        <div class="right-panel">
+            <div class="panel-header">
+                <div class="file-info">
+                    <span id="currentFile">Выберите задачу</span>
+                </div>
+                <div class="view-modes">
+                    <button id="viewTxt" class="btn btn-small">TXT</button>
+                    <button id="viewMd" class="btn btn-small active">MD</button>
+                </div>
+            </div>
+            <div class="editor-container">
+                <textarea id="fileEditor" style="display: none;"></textarea>
+                <div id="markdownPreview" class="markdown-preview"></div>
+            </div>
+            <div class="panel-footer">
+                <button id="saveFile" class="btn btn-primary" disabled>Сохранить</button>
+                <span id="saveStatus" class="save-status"></span>
+            </div>
+        </div>
+    </div>
+
+    <script src="js/tree.js"></script>
+    <script src="js/editor.js"></script>
+</body>
+</html>
