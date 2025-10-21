@@ -5,7 +5,7 @@ const FileParser = require('./src/file-parser');
 const TaskTree = require('./src/task-tree');
 
 const app = express();
-const PORT = 3000;
+const PORT = 3012;
 
 // Путь к директории с задачами
 const TASKS_DIR = path.join(__dirname, '..', 'tests', 'AGI-Tasks');

@@ -1,6 +1,7 @@
 // Глобальные переменные
 let currentMode = 'md'; // 'md' или 'txt'
 let isEditing = false;
+let isDarkTheme = true; // Темная тема по умолчанию
 
 // Элементы DOM
 const fileEditor = document.getElementById('fileEditor');
@@ -9,6 +10,7 @@ const saveButton = document.getElementById('saveFile');
 const saveStatus = document.getElementById('saveStatus');
 const viewTxtButton = document.getElementById('viewTxt');
 const viewMdButton = document.getElementById('viewMd');
+const toggleThemeButton = document.getElementById('toggleTheme');
 
 // Обновление превью Markdown
 function updateMarkdownPreview() {
@@ -46,10 +48,26 @@ function toggleEditMode() {
     }
 }
 
+// Переключение темы
+function toggleTheme() {
+    isDarkTheme = !isDarkTheme;
+    const body = document.body;
+
+    if (isDarkTheme) {
+        body.classList.add('dark-theme');
+        toggleThemeButton.textContent = '🌙';
+        toggleThemeButton.title = 'Переключить на светлую тему';
+    } else {
+        body.classList.remove('dark-theme');
+        toggleThemeButton.textContent = '☀️';
+        toggleThemeButton.title = 'Переключить на темную тему';
+    }
+}
+
 // Переключение между режимами TXT и MD
 function switchViewMode(mode) {
     currentMode = mode;
-    
+
     if (mode === 'txt') {
         viewTxtButton.classList.add('active');
         viewMdButton.classList.remove('active');
@@ -57,7 +75,7 @@ function switchViewMode(mode) {
         viewMdButton.classList.add('active');
         viewTxtButton.classList.remove('active');
     }
-    
+
     updateMarkdownPreview();
 }
 
@@ -123,6 +141,9 @@ saveButton.addEventListener('click', saveFile);
 
 viewTxtButton.addEventListener('click', () => switchViewMode('txt'));
 viewMdButton.addEventListener('click', () => switchViewMode('md'));
+
+// Переключение темы
+toggleThemeButton.addEventListener('click', toggleTheme);
 
 // Горячие клавиши
 document.addEventListener('keydown', (e) => {
