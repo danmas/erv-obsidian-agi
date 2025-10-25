@@ -1,10 +1,47 @@
 require('dotenv').config();
+const axios = require('axios');
 const ObsidianClient = require('./src/obsidian-client');
 const TaskManager = require('./src/task-manager');
 const LLMClient = require('./src/llm-client');
 
 async function main() {
   const args = process.argv.slice(2);
+
+  // Проверяем подключения к серверам перед запуском
+  console.log('\n🔍 Проверка подключений к серверам...\n');
+
+  let allConnectionsOk = true;
+
+  // Проверяем подключение к Obsidian
+  const obsidian = new ObsidianClient();
+  const obsidianOk = await obsidian.checkConnection();
+  if (!obsidianOk) {
+    allConnectionsOk = false;
+    console.error('❌ Не удается подключиться к Obsidian серверу');
+  }
+
+  // Проверяем подключение к LLM серверу
+  const llm = new LLMClient();
+  try {
+    console.log(`🔍 Проверяю доступность LLM сервера...`);
+    console.log(`📡 Подключаюсь к: ${llm.baseUrl}`);
+
+    await axios.get(`${llm.baseUrl}`, {
+      timeout: parseInt(process.env.LLM_HEALTH_TIMEOUT) || 2000
+    });
+
+    console.log(`✅ LLM сервер доступен`);
+  } catch (error) {
+    allConnectionsOk = false;
+    console.error(`❌ LLM сервер недоступен: ${error.message}`);
+    console.error(`📡 URL: ${llm.baseUrl}`);
+  }
+
+  if (allConnectionsOk) {
+    console.log('✅ Все серверы доступны\n');
+  } else {
+    console.error('❌ Некоторые серверы недоступны, но продолжаю работу...\n');
+  }
   
   // Проверяем флаг --from-obsidian
   const fromObsidianIndex = args.indexOf('--from-obsidian');

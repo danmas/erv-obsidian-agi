@@ -14,7 +14,10 @@
         <div class="left-panel">
             <div class="panel-header">
                 <h2>Задачи</h2>
-                <button id="refreshTree" class="btn btn-small">Обновить</button>
+                <div class="header-actions">
+                    <button id="createTaskBtn" class="btn btn-primary btn-small">Создать задачу</button>
+                    <button id="refreshTree" class="btn btn-small">Обновить</button>
+                </div>
             </div>
             <div id="taskTree" class="task-tree">
                 <!-- Дерево задач будет загружено сюда -->
@@ -43,6 +46,39 @@
             <div class="panel-footer">
                 <button id="saveFile" class="btn btn-primary" disabled>Сохранить</button>
                 <span id="saveStatus" class="save-status"></span>
+            </div>
+        </div>
+    </div>
+
+    <!-- Панель действий для выбранной задачи -->
+    <div id="taskActions" class="task-actions-panel" style="display: none;">
+        <div class="actions-header">
+            <h4>Действия</h4>
+        </div>
+        <div class="actions-buttons">
+            <button id="createFromDraftBtn" class="btn btn-primary btn-small" style="display: none;">Создать задачу из черновика</button>
+            <button id="createSubtaskBtn" class="btn btn-secondary btn-small">Создать подзадачу</button>
+            <button id="markCompletedBtn" class="btn btn-success btn-small">Выполнена</button>
+            <button id="markPendingBtn" class="btn btn-warning btn-small">В ожидание</button>
+        </div>
+    </div>
+
+    <!-- Модальное окно для создания задачи -->
+    <div id="createTaskModal" class="modal">
+        <div class="modal-content">
+            <span class="close-modal">&times;</span>
+            <h3>Создать новую задачу</h3>
+            <div class="form-group">
+                <label for="taskTitleInput">Название задачи:</label>
+                <input type="text" id="taskTitleInput" placeholder="Введите название задачи..." />
+            </div>
+            <div class="form-group">
+                <label for="taskDescriptionInput">Исходные соображения пользователя:</label>
+                <textarea id="taskDescriptionInput" rows="6" placeholder="Опишите детали задачи, требования, ограничения..."></textarea>
+            </div>
+            <div class="modal-actions">
+                <button id="submitCreateTask" class="btn btn-primary">Создать задачу</button>
+                <button class="btn btn-secondary close-modal-btn">Отмена</button>
             </div>
         </div>
     </div>

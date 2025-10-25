@@ -140,6 +140,27 @@ body.dark-theme .task-item.step {
     color: #ffffff;
 }
 
+body.dark-theme .task-item.draft {
+    background-color: #ca8a04;
+    color: #ffffff;
+}
+
+.task-item.draft {
+    background-color: #fef3c7;
+    color: #92400e;
+    font-weight: 500;
+}
+
+.status-badge.draft {
+    background-color: #fde68a;
+    color: #92400e;
+}
+
+body.dark-theme .status-badge.draft {
+    background-color: #ca8a04;
+    color: #ffffff;
+}
+
 body.dark-theme #fileEditor {
     background-color: #111111;
     color: #f0f0f0;
@@ -459,4 +480,203 @@ body.dark-theme .status-badge.in-progress {
 .status-badge.in-progress {
     background-color: #bbdefb;
     color: #1565c0;
+}
+
+/* Стили для модального окна */
+.modal {
+    display: none;
+    position: fixed;
+    z-index: 1000;
+    left: 0;
+    top: 0;
+    width: 100%;
+    height: 100%;
+    overflow: auto;
+    background-color: rgba(0, 0, 0, 0.5);
+}
+
+.modal-content {
+    background-color: #fefefe;
+    margin: 10% auto;
+    padding: 30px;
+    border-radius: 8px;
+    width: 90%;
+    max-width: 500px;
+    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+    position: relative;
+}
+
+body.dark-theme .modal-content {
+    background-color: #2a2a2a;
+    color: #f0f0f0;
+}
+
+.close-modal {
+    color: #aaa;
+    float: right;
+    font-size: 28px;
+    font-weight: bold;
+    line-height: 20px;
+    cursor: pointer;
+}
+
+.close-modal:hover,
+.close-modal:focus {
+    color: #000;
+}
+
+body.dark-theme .close-modal:hover,
+body.dark-theme .close-modal:focus {
+    color: #fff;
+}
+
+.modal h3 {
+    margin-top: 0;
+    margin-bottom: 20px;
+    color: #2196f3;
+}
+
+body.dark-theme .modal h3 {
+    color: #60a5fa;
+}
+
+.form-group {
+    margin-bottom: 20px;
+}
+
+.form-group label {
+    display: block;
+    margin-bottom: 8px;
+    font-weight: 500;
+}
+
+.form-group input[type="text"],
+.form-group textarea {
+    width: 100%;
+    padding: 10px;
+    border: 1px solid #ddd;
+    border-radius: 4px;
+    font-size: 14px;
+    box-sizing: border-box;
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Arial, sans-serif;
+}
+
+.form-group textarea {
+    resize: vertical;
+    min-height: 100px;
+}
+
+body.dark-theme .form-group input[type="text"],
+body.dark-theme .form-group textarea {
+    background-color: #1e1e1e;
+    border-color: #4a4a4a;
+    color: #f0f0f0;
+}
+
+.form-group input[type="text"]:focus,
+.form-group textarea:focus {
+    outline: none;
+    border-color: #2196f3;
+}
+
+.modal-actions {
+    display: flex;
+    gap: 10px;
+    justify-content: flex-end;
+    margin-top: 20px;
+}
+
+.btn-secondary {
+    background-color: #757575;
+    color: white;
+}
+
+.btn-secondary:hover {
+    background-color: #616161;
+}
+
+/* Стили для панели действий */
+.task-actions-panel {
+    position: fixed;
+    bottom: 20px;
+    right: 20px;
+    background-color: white;
+    border-radius: 8px;
+    padding: 15px;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+    z-index: 100;
+}
+
+body.dark-theme .task-actions-panel {
+    background-color: #2a2a2a;
+}
+
+.actions-header h4 {
+    margin: 0 0 10px 0;
+    color: #2196f3;
+}
+
+body.dark-theme .actions-header h4 {
+    color: #60a5fa;
+}
+
+.actions-buttons {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.btn-success {
+    background-color: #4caf50;
+    color: white;
+}
+
+.btn-success:hover {
+    background-color: #388e3c;
+}
+
+.btn-warning {
+    background-color: #ff9800;
+    color: white;
+}
+
+.btn-warning:hover {
+    background-color: #f57c00;
+}
+
+/* Стили для уведомлений */
+.notification {
+    position: fixed;
+    top: 20px;
+    right: 20px;
+    padding: 12px 20px;
+    border-radius: 4px;
+    color: white;
+    box-shadow: 0 3px 6px rgba(0, 0, 0, 0.16);
+    z-index: 1000;
+    transition: all 0.3s ease;
+    opacity: 0;
+    transform: translateY(-20px);
+    max-width: 350px;
+}
+
+.notification.show {
+    opacity: 1;
+    transform: translateY(0);
+}
+
+.notification.info {
+    background-color: #2196f3;
+}
+
+.notification.success {
+    background-color: #4caf50;
+}
+
+.notification.warning {
+    background-color: #ff9800;
+}
+
+.notification.error {
+    background-color: #f44336;
 }

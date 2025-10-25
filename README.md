@@ -23,19 +23,35 @@ ERV Obsidian AGI — это система управления задачами
 
 ## 🏗️ Архитектура
 
+### Серверная архитектура
+
 ```
 erv-obsidian-agi/
-├── src/
+├── agent-server.js            # 🚀 Сервер Агента на порту 3012
+├── web-interface/server.js    # 🌐 Веб-интерфейс на порту 3013 (прокси к Агент-серверу)
+├── src/                       # Библиотека Агента
 │   ├── obsidian-client.js    # Клиент для работы с Obsidian REST API
 │   ├── task-manager.js        # Менеджер задач и подзадач
 │   ├── llm-client.js          # Клиент для работы с LLM
 │   ├── note-parser.js         # Парсер заметок (фронтматтер, чеклисты)
 │   └── fix-encoding.js        # Исправление кодировок для русского языка
-├── tests/AGI-Tasks/           # Папка с созданными задачами (синхронизована с папками обсидиан через kosmos-file)
+├── tests/AGI-Tasks/           # Папка с созданными задачами
 ├── KB/                        # База знаний
-├── index.js                   # Точка входа для создания задач
+├── index.js                   # CLI-интерфейс Агента
 └── expand-step.js             # Утилита для создания подзадач
 ```
+
+### API Агента (порт 3012)
+
+| Метод | Endpoint | Описание |
+|-------|----------|----------|
+| POST | `/api/agent/create-task` | Создание новой задачи через ИИ |
+| POST | `/api/agent/create-from-draft` | Создание задачи из черновика |
+| POST | `/api/agent/create-subtask` | Создание подзадачи из шага |
+| GET | `/api/agent/tasks` | Получение списка задач |
+| PUT | `/api/agent/update-status` | Обновление статуса задачи |
+| POST | `/api/agent/generate-plan` | Генерация плана без создания файла |
+| GET | `/api/agent/health` | Проверка здоровья сервера |
 
 ### Компоненты
 
@@ -44,20 +60,78 @@ erv-obsidian-agi/
 - **LLMClient** — взаимодействует с сервером моделей для генерации планов
 - **NoteParser** — парсит Markdown-заметки (фронтматтер, чеклисты, метаданные)
 
-## 🚀 Установка
+## 🚀 Установка и запуск
 
-1. Клонировать репозиторий:
-```bash
-git clone <repository-url>
-cd erv-obsidian-agi
-```
+### 1. Установка зависимостей
 
-2. Установить зависимости:
 ```bash
+# Корневые зависимости
+npm install
+
+# Зависимости веб-интерфейса
+cd web-interface
 npm install
 ```
 
-3. Настроить `.env` файл:
+### 2. Настройка переменных окружения
+
+Создайте `.env` файл в корне проекта:
+
+```env
+PORT=3012
+
+# Obsidian API
+OBSIDIAN_API_KEY=your_api_key_here
+OBSIDIAN_PROTOCOL=http
+OBSIDIAN_HOST=192.168.1.254
+OBSIDIAN_PORT=27123
+OBSIDIAN_VERIFY_SSL=false
+
+# LLM Server
+LLM_SERVER_URL=http://usa:3002
+LLM_MODEL=FAST
+LLM_REQUEST_TIMEOUT=30000
+LLM_HEALTH_TIMEOUT=2000
+
+# Настройки
+NODE_ENV=development
+REQUEST_TIMEOUT=5000
+```
+
+### 3. Запуск серверов
+
+**Вариант 1: Запуск всех серверов одновременно**
+
+```bash
+# Запуск и Агента, и Веб-интерфейса
+npm start
+```
+
+**Вариант 2: Запуск отдельных серверов**
+
+```bash
+# Только Сервер Агента (порт 3012)
+npm run start:agent
+
+# Только Веб-интерфейс (порт 3013)
+npm run start:web
+```
+
+**Вариант 3: Запуск напрямую**
+
+```bash
+# Сервер Агента (порт 3012)
+node agent-server.js
+
+# Веб-интерфейс (порт 3013)
+node web-interface/server.js
+```
+
+### 4. Доступ к интерфейсам
+
+- 🌐 **Веб-интерфейс:** `http://localhost:3013`
+- 🚀 **API Агента:** `http://localhost:3012`
+- 📋 **Документация API:** Откройте браузер и перейдите по адресам выше
 ```env
 # Obsidian API
 OBSIDIAN_API_KEY=your_api_key_here
@@ -84,12 +158,12 @@ REQUEST_TIMEOUT=5000
 #### Стандартный способ
 
 ```bash
-node index.js "Название задачи"
+npm run task "Название задачи"
 ```
 
 **Пример:**
 ```bash
-node index.js "Настроить CI/CD pipeline"
+npm run task "Настроить CI/CD pipeline"
 ```
 
 Агент:
@@ -103,7 +177,7 @@ node index.js "Настроить CI/CD pipeline"
 Если задача сложная или неоднозначная, агент запросит уточнения:
 
 ```bash
-node index.js "Оптимизировать производительность сайта"
+npm run task "Оптимизировать производительность сайта"
 ```
 
 Агент:
@@ -113,7 +187,7 @@ node index.js "Оптимизировать производительность
 
 После ответа на вопросы в Obsidian, запустите:
 ```bash
-node index.js --from-obsidian "AGI-Tasks/Черновик - Оптимизировать_производительность_сайта.md"
+npm run task -- --from-obsidian "AGI-Tasks/Черновик - Оптимизировать_производительность_сайта.md"
 ```
 
 Агент:
@@ -129,7 +203,7 @@ node index.js --from-obsidian "AGI-Tasks/Черновик - Оптимизиро
 1. Создайте заметку в Obsidian с описанием задачи (например, `AGI-Tasks/Черновик - Настроить CI_CD.md`)
 2. Запустите команду:
 ```bash
-node index.js --from-obsidian "AGI-Tasks/Черновик - Настроить CI_CD.md"
+npm run task -- --from-obsidian "AGI-Tasks/Черновик - Настроить CI_CD.md"
 ```
 
 Агент:

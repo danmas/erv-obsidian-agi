@@ -68,7 +68,23 @@ class LLMClient {
         await axios.get(`${this.baseUrl}`, { timeout: parseInt(process.env.LLM_HEALTH_TIMEOUT) || 2000 });
         console.log(`✅ Сервер доступен`);
       } catch (healthError) {
-        console.error(`❌ Сервер недоступен: ${healthError.message}`);
+        console.error(`❌ LLM сервер недоступен: ${healthError.message}`);
+        console.error(`📡 URL: ${this.baseUrl}`);
+
+        if (healthError.code === 'ECONNREFUSED') {
+          console.error(`❌ Не удается подключиться к серверу на ${this.baseUrl}`);
+          console.error(`   Убедитесь что:`);
+          console.error(`   1. Сервер запущен на порту указанном в LLM_SERVER_URL`);
+          console.error(`   2. Нет firewall блокировки`);
+          console.error(`   3. Сервер слушает на правильном порту`);
+        } else if (healthError.code === 'ENOTFOUND') {
+          console.error(`❌ Не удается разрешить адрес сервера`);
+          console.error(`   Проверьте настройки LLM_SERVER_URL`);
+        } else if (healthError.code === 'ETIMEDOUT') {
+          console.error(`❌ Таймаут подключения к серверу`);
+          console.error(`   Сервер отвечает слишком медленно или недоступен`);
+        }
+
         throw new Error(`LLM сервер недоступен: ${healthError.message}`);
       }
       
@@ -361,7 +377,23 @@ ${fixedUserContext}
         await axios.get(`${this.baseUrl}`, { timeout: parseInt(process.env.LLM_HEALTH_TIMEOUT) || 2000 });
         console.log(`✅ Сервер доступен`);
       } catch (healthError) {
-        console.error(`❌ Сервер недоступен: ${healthError.message}`);
+        console.error(`❌ LLM сервер недоступен: ${healthError.message}`);
+        console.error(`📡 URL: ${this.baseUrl}`);
+
+        if (healthError.code === 'ECONNREFUSED') {
+          console.error(`❌ Не удается подключиться к серверу на ${this.baseUrl}`);
+          console.error(`   Убедитесь что:`);
+          console.error(`   1. Сервер запущен на порту указанном в LLM_SERVER_URL`);
+          console.error(`   2. Нет firewall блокировки`);
+          console.error(`   3. Сервер слушает на правильном порту`);
+        } else if (healthError.code === 'ENOTFOUND') {
+          console.error(`❌ Не удается разрешить адрес сервера`);
+          console.error(`   Проверьте настройки LLM_SERVER_URL`);
+        } else if (healthError.code === 'ETIMEDOUT') {
+          console.error(`❌ Таймаут подключения к серверу`);
+          console.error(`   Сервер отвечает слишком медленно или недоступен`);
+        }
+
         throw new Error(`LLM сервер недоступен: ${healthError.message}`);
       }
       
@@ -475,7 +507,23 @@ ${questionsAndAnswers}
         await axios.get(`${this.baseUrl}`, { timeout: parseInt(process.env.LLM_HEALTH_TIMEOUT) || 2000 });
         console.log(`✅ Сервер доступен`);
       } catch (healthError) {
-        console.error(`❌ Сервер недоступен: ${healthError.message}`);
+        console.error(`❌ LLM сервер недоступен: ${healthError.message}`);
+        console.error(`📡 URL: ${this.baseUrl}`);
+
+        if (healthError.code === 'ECONNREFUSED') {
+          console.error(`❌ Не удается подключиться к серверу на ${this.baseUrl}`);
+          console.error(`   Убедитесь что:`);
+          console.error(`   1. Сервер запущен на порту указанном в LLM_SERVER_URL`);
+          console.error(`   2. Нет firewall блокировки`);
+          console.error(`   3. Сервер слушает на правильном порту`);
+        } else if (healthError.code === 'ENOTFOUND') {
+          console.error(`❌ Не удается разрешить адрес сервера`);
+          console.error(`   Проверьте настройки LLM_SERVER_URL`);
+        } else if (healthError.code === 'ETIMEDOUT') {
+          console.error(`❌ Таймаут подключения к серверу`);
+          console.error(`   Сервер отвечает слишком медленно или недоступен`);
+        }
+
         throw new Error(`LLM сервер недоступен: ${healthError.message}`);
       }
       

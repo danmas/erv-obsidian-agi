@@ -4,10 +4,17 @@
   "description": "Автономный AI-агент с внешней памятью в Obsidian",
   "main": "index.js",
   "scripts": {
-    "start": "node index.js"
+    "start": "concurrently \"node agent-server.js\" \"cd web-interface && node server.js\"",
+    "start:agent": "node agent-server.js",
+    "start:web": "cd web-interface && node server.js",
+    "task": "node index.js"
   },
   "dependencies": {
     "axios": "^1.6.0",
+    "cors": "^2.8.5",
     "dotenv": "^16.3.1"
+  },
+  "devDependencies": {
+    "concurrently": "^9.2.1"
   }
 }
